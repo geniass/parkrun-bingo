@@ -9,6 +9,18 @@ from datetime import datetime
 def csv_filename(id) -> str:
     return f"parkrunner_{id}.csv"
 
+def hms_to_minutes(hms: str, sep = ":") -> float:
+    parts = hms.split(sep)
+    match len(parts):
+        case 2:
+            # mm:ss
+            return int(parts[0]) + int(parts[1])/60
+        case 3:
+            # hh:mm:ss
+            return int(parts[0])*60 + int(parts[1]) + int(parts[2])/60
+        case _:
+            raise ValueError(f"invalid time '{hms}', should be either hh:mm:ss or mm:ss")
+
 def scrape_parkrun_results(url, id):
     """
     Scrapes parkrun results from a runner's profile page
@@ -54,8 +66,7 @@ def scrape_parkrun_results(url, id):
         time_col = [col for col in df.columns if 'Time' in col][0]  # Find the time column
         
         df[date_col] = pd.to_datetime(df[date_col], format='%d/%m/%Y')
-        df['Time_Minutes'] = df[time_col].apply(lambda x: 
-            float(x.split(':')[0]) + float(x.split(':')[1])/60 if ':' in str(x) else None)
+        df['Time_Minutes'] = df[time_col].apply(hms_to_minutes)
         
         return df
     
@@ -136,42 +147,44 @@ def plot_parkrun_history(df):
     
     return fig
 
-id = "3163889"
-url = f"https://www.parkrun.co.za/parkrunner/{id}/all/"
-fname = csv_filename(id)
-try:
-    os.stat(fname)
-    print("Found CSV, loading...")
-    with open(fname) as f:
-        df = pd.read_csv(fname)
-except FileNotFoundError:
-    df = scrape_parkrun_results(url, id)
-    df.to_csv(f"parkrunner_{id}.csv")
 
-if df is not None:
-    # print("\nDataFrame Info:")
-    # print(df.info())
-    # print("\nFirst few rows:")
-    # print(df.head())
+if __name__ == "__main__":
+    id = "3163889"
+    url = f"https://www.parkrun.co.za/parkrunner/{id}/all/"
+    fname = csv_filename(id)
+    try:
+        os.stat(fname)
+        print("Found CSV, loading...")
+        with open(fname) as f:
+            df = pd.read_csv(fname)
+    except FileNotFoundError:
+        df = scrape_parkrun_results(url, id)
+        df.to_csv(f"parkrunner_{id}.csv")
 
-    df.sort_values(by="Run Date", ascending=True, inplace=True)
-    df.reset_index(inplace=True)
-    df.plot(x="Run Date", y="Time_Minutes")
-    
-    # fig = plot_parkrun_history(df)
-    # plt.show()
+    if df is not None:
+        # print("\nDataFrame Info:")
+        # print(df.info())
+        # print("\nFirst few rows:")
+        # print(df.head())
 
-    df["seconds"] = df["Time"].astype(str).apply(lambda t: int(t.split(":")[1]))
-    df["count"] = df["seconds"].expanding().apply(lambda s: int(s.nunique()))
-    df.plot(y="count")
-    print(df)
-    seconds = df["seconds"].unique()
-    df2 = pd.DataFrame({"second": seconds, "bingo": True}).set_index("second")
-    all_seconds = pd.DataFrame({"second": [i for i in range(60)]}).set_index("second").infer_objects()
-    df3 = all_seconds.join(df2, on="second")
-    df3["bingo"] = df3["bingo"].fillna(False).infer_objects(copy=False)
-    df3 = df3.infer_objects()
-    print(df3[df3["bingo"] == False])
-    print("Num remaining:", len(df3[df3["bingo"] == False].index))
+        df.sort_values(by="Run Date", ascending=True, inplace=True)
+        df.reset_index(inplace=True)
+        df.plot(x="Run Date", y="Time_Minutes")
+        
+        # fig = plot_parkrun_history(df)
+        # plt.show()
 
-    plt.show()
+        df["seconds"] = df["Time"].astype(str).apply(lambda t: int(t.split(":")[1]))
+        df["count"] = df["seconds"].expanding().apply(lambda s: int(s.nunique()))
+        df.plot(y="count")
+        print(df)
+        seconds = df["seconds"].unique()
+        df2 = pd.DataFrame({"second": seconds, "bingo": True}).set_index("second")
+        all_seconds = pd.DataFrame({"second": [i for i in range(60)]}).set_index("second").infer_objects()
+        df3 = all_seconds.join(df2, on="second")
+        df3["bingo"] = df3["bingo"].fillna(False).infer_objects(copy=False)
+        df3 = df3.infer_objects()
+        print(df3[df3["bingo"] == False])
+        print("Num remaining:", len(df3[df3["bingo"] == False].index))
+
+        plt.show()
