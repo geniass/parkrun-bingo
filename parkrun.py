@@ -1,10 +1,10 @@
 import os
+import random
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
 
 def csv_filename(id) -> str:
     return f"parkrunner_{id}.csv"
@@ -20,6 +20,12 @@ def hms_to_minutes(hms: str, sep = ":") -> float:
             return int(parts[0])*60 + int(parts[1]) + int(parts[2])/60
         case _:
             raise ValueError(f"invalid time '{hms}', should be either hh:mm:ss or mm:ss")
+
+def expected_curve(n, num_samples=1000):
+    probs = (n - np.arange(0, float(n))) / n * np.ones((num_samples, n))
+    samples = np.random.uniform(0, 1, size=(num_samples, n)) < probs
+    runs = np.cumsum(samples, axis=1)
+    return np.mean(runs, axis=0)
 
 def scrape_parkrun_results(url, id):
     """
@@ -169,15 +175,26 @@ if __name__ == "__main__":
 
         df.sort_values(by="Run Date", ascending=True, inplace=True)
         df.reset_index(inplace=True)
-        df.plot(x="Run Date", y="Time_Minutes")
+        # df.plot(x="Run Date", y="Time_Minutes")
         
         # fig = plot_parkrun_history(df)
         # plt.show()
 
+
+        df["avg"] = expected_curve(len(df.index))
+
         df["seconds"] = df["Time"].astype(str).apply(lambda t: int(t.split(":")[1]))
         df["count"] = df["seconds"].expanding().apply(lambda s: int(s.nunique()))
-        df.plot(y="count")
+
+        # so that they start at 0
+        df["count"] -= 1
+        df["avg"] -= 1
+
+        print(df['avg'])
+        ax = df.plot(y="count", xlim=0, ylim=0)
+        df.plot(y="avg", ax=ax)
         print(df)
+
         seconds = df["seconds"].unique()
         df2 = pd.DataFrame({"second": seconds, "bingo": True}).set_index("second")
         all_seconds = pd.DataFrame({"second": [i for i in range(60)]}).set_index("second").infer_objects()
